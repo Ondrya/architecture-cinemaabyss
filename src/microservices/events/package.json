@@ -1,0 +1,34 @@
+{
+  "name": "events-service",
+  "version": "1.0.0",
+  "description": "Event-driven microservice for CinemaAbyss that produces and consumes Kafka events according to the official API specification",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "kafkajs": "^2.2.4"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "cinemaabyss",
+    "kafka",
+    "events",
+    "microservice",
+    "express",
+    "event-driven"
+  ],
+  "author": "CinemaAbyss Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-org/cinemaabyss.git"
+  }
+}
