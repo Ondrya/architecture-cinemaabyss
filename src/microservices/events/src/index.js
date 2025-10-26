@@ -15,24 +15,32 @@ const kafka = new Kafka({
 const producer = kafka.producer({ retries: 3 });
 const consumer = kafka.consumer({ groupId: 'events-group' });
 
-// Подключение и подписка на топики
-async function createTopics() {
-  await producer.connect();
-  await consumer.connect();
+// Подключение и запуск consumer'а — ДО старта HTTP-сервера
+async function startKafka() {
+  try {
+    await producer.connect();
+    await consumer.connect();
 
-  const topics = ['user-events', 'payment-events', 'movie-events'];
-  for (const topic of topics) {
-    await consumer.subscribe({ topic, fromBeginning: true });
+    // Подписка ДО запуска
+    await consumer.subscribe({ topic: 'user-events', fromBeginning: true });
+    await consumer.subscribe({ topic: 'payment-events', fromBeginning: true });
+    await consumer.subscribe({ topic: 'movie-events', fromBeginning: true });
+
+    // Запуск обработки сообщений
+    await consumer.run({
+      eachMessage: async ({ topic, message }) => {
+        const value = message.value.toString();
+        console.log(`[Consumer] Received from ${topic}: ${value}`);
+      }
+    });
+
+    console.log('✅ Kafka consumer is running and subscribed to topics');
+  } catch (err) {
+    console.error('❌ Failed to start Kafka:', err);
+    // Не завершаем процесс — даём HTTP-серверу работать
   }
 }
 
-// Обработка входящих сообщений (логирование)
-consumer.run({
-  eachMessage: async ({ topic, message }) => {
-    const value = message.value.toString();
-    console.log(`[Consumer] Received from ${topic}: ${value}`);
-  }
-});
 
 // --- Эндпоинты согласно OpenAPI ---
 
@@ -40,7 +48,6 @@ consumer.run({
 app.post('/api/events/movie', async (req, res) => {
   try {
     const event = req.body;
-    // Валидация минимальная (в production — использовать Joi/Zod)
     if (!event.movie_id || !event.title || !event.action) {
       return res.status(400).json({ error: 'Missing required fields: movie_id, title, action' });
     }
@@ -50,11 +57,17 @@ app.post('/api/events/movie', async (req, res) => {
       messages: [{ value: JSON.stringify(event) }]
     });
 
-    const record = result[0].offsets[0];
+    // ✅ Правильная структура: result[0] — объект с partition и offset
+    if (!result || result.length === 0) {
+      throw new Error('Producer returned empty result');
+    }
+
+    const record = result[0]; // ← не result[0].offsets[0]!
+
     return res.status(201).json({
       status: 'success',
       partition: record.partition,
-      offset: parseInt(record.offset),
+      offset: parseInt(record.offset, 10),
       event: {
         id: `${event.movie_id}-${event.action}-${Date.now()}`,
         type: 'movie',
@@ -81,11 +94,15 @@ app.post('/api/events/user', async (req, res) => {
       messages: [{ value: JSON.stringify(event) }]
     });
 
-    const record = result[0].offsets[0];
+    if (!result || result.length === 0) {
+      throw new Error('Producer returned empty result');
+    }
+    const record = result[0];
+
     return res.status(201).json({
       status: 'success',
       partition: record.partition,
-      offset: parseInt(record.offset),
+      offset: parseInt(record.offset, 10),
       event: {
         id: `${event.user_id}-${event.action}-${Date.now()}`,
         type: 'user',
@@ -112,11 +129,15 @@ app.post('/api/events/payment', async (req, res) => {
       messages: [{ value: JSON.stringify(event) }]
     });
 
-    const record = result[0].offsets[0];
+    if (!result || result.length === 0) {
+      throw new Error('Producer returned empty result');
+    }
+    const record = result[0];
+    
     return res.status(201).json({
       status: 'success',
       partition: record.partition,
-      offset: parseInt(record.offset),
+      offset: parseInt(record.offset, 10),
       event: {
         id: `${event.payment_id}-${event.status}-${Date.now()}`,
         type: 'payment',
@@ -135,9 +156,12 @@ app.get('/api/events/health', (req, res) => {
   res.json({ status: true });
 });
 
+
+
 // Запуск сервиса
+
+startKafka().catch(console.error); // Запускаем Kafka асинхронно
+
 app.listen(port, async () => {
   console.log(`Events service running on http://localhost:${port}`);
-  await createTopics();
-  console.log('Connected to Kafka and subscribed to topics');
 });
