@@ -11,7 +11,7 @@ MOVIES_SERVICE_URL = os.getenv("MOVIES_SERVICE_URL", "http://movies-service:8081
 GRADUAL = os.getenv("GRADUAL_MIGRATION", "false").lower() == "true"
 PERCENT = int(os.getenv("MOVIES_MIGRATION_PERCENT", "0"))
 
-@app.get("/health")
+@app.api_route("/api/proxy/health")
 async def health():
     return {"status": "ok"}
 
