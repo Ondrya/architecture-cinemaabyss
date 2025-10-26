@@ -1,6 +1,7 @@
 import os
 import random
 from fastapi import FastAPI, Request
+from fastapi.responses import Response
 import httpx
 
 app = FastAPI()
@@ -9,6 +10,10 @@ MONOLITH_URL = os.getenv("MONOLITH_URL", "http://monolith:8080")
 MOVIES_SERVICE_URL = os.getenv("MOVIES_SERVICE_URL", "http://movies-service:8081")
 GRADUAL = os.getenv("GRADUAL_MIGRATION", "false").lower() == "true"
 PERCENT = int(os.getenv("MOVIES_MIGRATION_PERCENT", "0"))
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
 
 @app.api_route("/api/movies/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
 async def proxy_movies(request: Request, path: str):
@@ -25,7 +30,12 @@ async def proxy_movies(request: Request, path: str):
         )
         resp = await client.send(req)
 
-    return resp.json(), resp.status_code, resp.headers
+    #return resp.json(), resp.status_code, resp.headers
+    return Response(
+        content=resp.content,
+        status_code=resp.status_code,
+        headers=dict(resp.headers),
+    )
 
 # Проксируем всё остальное в монолит
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
@@ -40,4 +50,9 @@ async def proxy_fallback(request: Request, path: str):
         )
         resp = await client.send(req)
 
-    return resp.json(), resp.status_code, resp.headers
+    #return resp.json(), resp.status_code, resp.headers
+    return Response(
+        content=resp.content,
+        status_code=resp.status_code,
+        headers=dict(resp.headers),
+    )

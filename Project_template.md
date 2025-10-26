@@ -227,7 +227,8 @@ cat .docker/config.json | base64
 
   Вы увидите
 
-  NAME         READY   STATUS  postgres-0   1/1     Running
+  NAME         READY   STATUS  
+  postgres-0   1/1     Running
 
 4. Разверните Kafka:
 
