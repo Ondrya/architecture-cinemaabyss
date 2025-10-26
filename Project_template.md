@@ -389,6 +389,8 @@ kubectl delete  namespace cinemaabyss
 helm install cinemaabyss .\src\kubernetes\helm --namespace cinemaabyss --create-namespace
 ```
 
+![1761477304409](image/Project_template/1761477304409.png)
+
 Если в процессе будет ошибка
 
 ```code
@@ -406,6 +408,8 @@ minikube tunnel
 Потом вызовите
 https://cinemaabyss.example.com/api/movies
 и приложите скриншот развертывания helm и вывода https://cinemaabyss.example.com/api/movies
+
+![1761477418017](image/Project_template/1761477418017.png)
 
 ## Удаляем все
 
