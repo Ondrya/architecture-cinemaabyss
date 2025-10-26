@@ -227,8 +227,7 @@ cat .docker/config.json | base64
 
   Вы увидите
 
-  NAME         READY   STATUS  
-  postgres-0   1/1     Running
+  NAME         READY   STATUS  postgres-0   1/1     Running
 
 4. Разверните Kafka:
 
@@ -322,6 +321,10 @@ cat .docker/config.json | base64
 #### Шаг 3
 
 Добавьте сюда скриншота вывода при вызове https://cinemaabyss.example.com/api/movies и  скриншот вывода event-service после вызова тестов.
+
+![1761476374041](image/Project_template/1761476374041.png)
+
+![1761476403888](image/Project_template/1761476403888.png)
 
 # Задание 4
 
