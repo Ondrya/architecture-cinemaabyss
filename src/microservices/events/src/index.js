@@ -3,6 +3,29 @@ const express = require('express');
 const app = express();
 const port = process.env.PORT || 3000; // ← берёт из переменной окружения
 
+// Логируем
+app.use((req, res, next) => {
+  if (req.headers['content-type']?.includes('application/json')) {
+    let body = '';
+    req.on('data', chunk => {
+      body += chunk.toString();
+    });
+    req.on('end', () => {
+      console.log(`[DEBUG] Incoming request to ${req.method} ${req.url}`);
+      console.log(`[DEBUG] Raw body:`, body);
+      try {
+        req.body = JSON.parse(body);
+      } catch (e) {
+        console.warn('[DEBUG] Failed to parse JSON:', e.message);
+        req.body = null;
+      }
+      next();
+    });
+  } else {
+    next();
+  }
+});
+
 // Middleware для парсинга JSON
 app.use(express.json());
 
@@ -161,6 +184,14 @@ app.get('/api/events/health', (req, res) => {
 // Запуск сервиса
 
 startKafka().catch(console.error); // Запускаем Kafka асинхронно
+
+// Error-handling middleware (обязательно в конце!)
+app.use((err, req, res, next) => {
+  if (err.type === 'entity.parse.failed' || err.message.includes('JSON')) {
+    return res.status(400).json({ error: 'Invalid JSON payload' });
+  }
+  res.status(500).json({ error: 'Internal error' });
+});
 
 app.listen(port, async () => {
   console.log(`Events service running on http://localhost:${port}`);
