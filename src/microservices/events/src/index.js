@@ -1,35 +1,42 @@
 const { Kafka } = require('kafkajs');
 const express = require('express');
 const app = express();
-const port = process.env.PORT || 3000; // ← берёт из переменной окружения
+const port = process.env.PORT || 3000;
 
-// Логируем
+
+app.use(express.json());
+// Middleware для логирования (после парсинга)
 app.use((req, res, next) => {
-  if (req.headers['content-type']?.includes('application/json')) {
-    let body = '';
-    req.on('data', chunk => {
-      body += chunk.toString();
-    });
-    req.on('end', () => {
-      console.log(`[DEBUG] Incoming request to ${req.method} ${req.url}`);
-      console.log(`[DEBUG] Raw body:`, body);
-      try {
-        req.body = JSON.parse(body);
-      } catch (e) {
-        console.warn('[DEBUG] Failed to parse JSON:', e.message);
-        req.body = null;
-      }
-      next();
-    });
-  } else {
-    next();
+  if (req.body && Object.keys(req.body).length > 0) {
+    console.log(`[DEBUG] Incoming ${req.method} ${req.url}`);
+    console.log(`[DEBUG] Parsed body:`, JSON.stringify(req.body, null, 2));
   }
+  next();
 });
 
-// Middleware для парсинга JSON
-app.use(express.json());
 
-// Инициализация Kafka
+// === Обработчики событий (вынесены отдельно) ===
+
+async function handleUserEvent(messageValue) {
+  const event = JSON.parse(messageValue);
+  console.log(`[UserEvent] Processing:`, event);
+  // Здесь может быть бизнес-логика: обновление профиля, аудит, уведомления и т.д.
+}
+
+async function handlePaymentEvent(messageValue) {
+  const event = JSON.parse(messageValue);
+  console.log(`[PaymentEvent] Processing:`, event);
+  // Например: обновление баланса, отправка чека, интеграция с бухгалтерией
+}
+
+async function handleMovieEvent(messageValue) {
+  const event = JSON.parse(messageValue);
+  console.log(`[MovieEvent] Processing:`, event);
+  // Например: обновление статистики просмотров, рекомендаций
+}
+
+// === Инициализация Kafka ===
+
 const kafka = new Kafka({
   brokers: ['kafka:9092'],
   clientId: 'events-service'
@@ -38,36 +45,63 @@ const kafka = new Kafka({
 const producer = kafka.producer({ retries: 3 });
 const consumer = kafka.consumer({ groupId: 'events-group' });
 
-// Подключение и запуск consumer'а — ДО старта HTTP-сервера
 async function startKafka() {
   try {
     await producer.connect();
     await consumer.connect();
 
-    // Подписка ДО запуска
     await consumer.subscribe({ topic: 'user-events', fromBeginning: true });
     await consumer.subscribe({ topic: 'payment-events', fromBeginning: true });
     await consumer.subscribe({ topic: 'movie-events', fromBeginning: true });
 
-    // Запуск обработки сообщений
     await consumer.run({
-      eachMessage: async ({ topic, message }) => {
-        const value = message.value.toString();
-        console.log(`[Consumer] Received from ${topic}: ${value}`);
+    eachMessage: async ({ topic, partition, message }) => {
+      const offset = message.offset;
+      const value = message.value?.toString() || '';
+
+      console.log(`[Consumer] Received from ${topic}[partition=${partition}, offset=${offset}]: ${value}`);
+
+      let status = 'success';
+      let error = null;
+
+      try {
+        switch (topic) {
+          case 'user-events':
+            await handleUserEvent(value);
+            break;
+          case 'payment-events':
+            await handlePaymentEvent(value);
+            break;
+          case 'movie-events':
+            await handleMovieEvent(value);
+            break;
+          default:
+            console.warn(`[Consumer] Unknown topic: ${topic}`);
+            return;
+        }
+      } catch (err) {
+        status = 'failed';
+        error = err.message || 'Unknown error';
+        console.error(`[Consumer] Error processing message from ${topic}[offset=${offset}]:`, err);
+      } finally {
+        // Логируем результат обработки
+        if (status === 'success') {
+          console.log(`[Consumer] ✅ Successfully processed ${topic}[offset=${offset}]`);
+        } else {
+          console.log(`[Consumer] ❌ Failed to process ${topic}[offset=${offset}]: ${error}`);
+        }
       }
-    });
+    }
+  });
 
     console.log('✅ Kafka consumer is running and subscribed to topics');
   } catch (err) {
     console.error('❌ Failed to start Kafka:', err);
-    // Не завершаем процесс — даём HTTP-серверу работать
   }
 }
 
+// === HTTP-эндпоинты (только продюсеры) ===
 
-// --- Эндпоинты согласно OpenAPI ---
-
-// POST /api/events/movie
 app.post('/api/events/movie', async (req, res) => {
   try {
     const event = req.body;
@@ -80,13 +114,7 @@ app.post('/api/events/movie', async (req, res) => {
       messages: [{ value: JSON.stringify(event) }]
     });
 
-    // ✅ Правильная структура: result[0] — объект с partition и offset
-    if (!result || result.length === 0) {
-      throw new Error('Producer returned empty result');
-    }
-
-    const record = result[0]; // ← не result[0].offsets[0]!
-
+    const record = result[0];
     return res.status(201).json({
       status: 'success',
       partition: record.partition,
@@ -104,7 +132,6 @@ app.post('/api/events/movie', async (req, res) => {
   }
 });
 
-// POST /api/events/user
 app.post('/api/events/user', async (req, res) => {
   try {
     const event = req.body;
@@ -117,11 +144,7 @@ app.post('/api/events/user', async (req, res) => {
       messages: [{ value: JSON.stringify(event) }]
     });
 
-    if (!result || result.length === 0) {
-      throw new Error('Producer returned empty result');
-    }
     const record = result[0];
-
     return res.status(201).json({
       status: 'success',
       partition: record.partition,
@@ -139,7 +162,6 @@ app.post('/api/events/user', async (req, res) => {
   }
 });
 
-// POST /api/events/payment
 app.post('/api/events/payment', async (req, res) => {
   try {
     const event = req.body;
@@ -152,11 +174,7 @@ app.post('/api/events/payment', async (req, res) => {
       messages: [{ value: JSON.stringify(event) }]
     });
 
-    if (!result || result.length === 0) {
-      throw new Error('Producer returned empty result');
-    }
     const record = result[0];
-    
     return res.status(201).json({
       status: 'success',
       partition: record.partition,
@@ -174,25 +192,27 @@ app.post('/api/events/payment', async (req, res) => {
   }
 });
 
-// Health check
 app.get('/api/events/health', (req, res) => {
   res.json({ status: true });
 });
 
 
 
-// Запуск сервиса
-
-startKafka().catch(console.error); // Запускаем Kafka асинхронно
-
-// Error-handling middleware (обязательно в конце!)
 app.use((err, req, res, next) => {
-  if (err.type === 'entity.parse.failed' || err.message.includes('JSON')) {
+  console.error('Unhandled error:', err);
+  if (err.type === 'entity.parse.failed' || err.message?.includes('JSON')) {
     return res.status(400).json({ error: 'Invalid JSON payload' });
   }
-  res.status(500).json({ error: 'Internal error' });
+  res.status(500).json({
+    error: 'Internal Server Error',
+    message: err.message // ⚠️ только если безопасно!
+  });
 });
 
-app.listen(port, async () => {
+
+// Запуск
+startKafka().catch(console.error);
+
+app.listen(port, () => {
   console.log(`Events service running on http://localhost:${port}`);
 });
