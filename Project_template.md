@@ -1,5 +1,3 @@
-    
-
 ## Изучите [README.md](.\README.md) файл и структуру проекта.
 
 # Задание 1
@@ -48,8 +46,6 @@
   ```bash
   curl http://localhost:8000/api/movies
   ```
-
-      
 - Протестируйте постепенный переход, изменив переменную окружения MOVIES_MIGRATION_PERCENT в файле docker-compose.yml.
 
 ### 2. Kafka
@@ -131,6 +127,8 @@ jobs:
 
 ![1761456226352](image/Project_template/1761456226352.png)
 
+Упали только запросы к events (при запуске тестов из PR)
+![1761462025937](image/Project_template/1761462025937.png)
 
 ### Proxy в Kubernetes
 
