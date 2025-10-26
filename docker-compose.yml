@@ -94,7 +94,7 @@ services:
     ports:
       - "8082:3000"
     environment:
-      port: 8082
+      #port: 8082
       kafka_brokers: kafka:9092
     networks:
       - cinemaabyss-network
